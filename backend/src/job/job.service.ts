@@ -42,7 +42,18 @@ export class JobService {
     }
     
     const state = await job.getState();
-    const progress = job.progress;
+    const progressData = job.progress;
+    
+    let progress = 0;
+    let message = '';
+    
+    if (typeof progressData === 'object' && progressData !== null) {
+      progress = (progressData as any).percent || 0;
+      message = (progressData as any).message || '';
+    } else if (typeof progressData === 'number') {
+      progress = progressData;
+    }
+    
     const returnvalue = job.returnvalue;
     const failedReason = job.failedReason;
 
@@ -50,6 +61,7 @@ export class JobService {
       jobId,
       status: state, // 'completed', 'failed', 'delayed', 'active', 'waiting', etc.
       progress,
+      message,
       resultUrl: returnvalue?.resultUrl,
       error: failedReason
     };

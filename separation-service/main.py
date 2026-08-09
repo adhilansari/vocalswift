@@ -54,7 +54,7 @@ def process_audio(file_path: str, output_id: str, format: str = "mp3", trim_sile
         print(f"Starting Demucs processing for {file_path}")
         cmd = [
             "demucs",
-            "-n", "htdemucs",
+            "-n", "htdemucs_ft",
             "--two-stems", "vocals",
             "--mp3",
             "--mp3-bitrate", "320",
@@ -64,7 +64,7 @@ def process_audio(file_path: str, output_id: str, format: str = "mp3", trim_sile
         subprocess.run(cmd, check=True, capture_output=True, text=True)
         
         basename = os.path.splitext(os.path.basename(file_path))[0]
-        vocals_mp3_path = os.path.join(output_folder, "htdemucs", basename, "vocals.mp3")
+        vocals_mp3_path = os.path.join(output_folder, "htdemucs_ft", basename, "vocals.mp3")
         
         if not os.path.exists(vocals_mp3_path):
              raise Exception(f"Expected output file not found at {vocals_mp3_path}")

@@ -11,7 +11,7 @@ export default function Home() {
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [trimSilence, setTrimSilence] = useState(false);
   
-  const { jobId, status, progress, resultUrl, error, setJobId, setStatus, setProgress, setResult, setError, reset } = useJobStore();
+  const { jobId, status, progress, message, resultUrl, error, setJobId, setStatus, setProgress, setResult, setError, reset } = useJobStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // WaveSurfer setup
@@ -145,7 +145,7 @@ export default function Home() {
   useEffect(() => {
     let interval: NodeJS.Timeout;
     
-    if (jobId && (status === 'uploading' || status === 'queued' || status === 'active' || status === 'processing')) {
+    if (jobId && (status === 'uploading' || status === 'queued' || status === 'waiting' || status === 'delayed' || status === 'active' || status === 'processing')) {
       interval = setInterval(async () => {
         try {
           // Fetch Job Status
@@ -160,7 +160,7 @@ export default function Home() {
               setError(data.error || 'Job failed');
               clearInterval(interval);
             } else {
-              setProgress(data.progress || 0);
+              setProgress(data.progress || 0, data.message);
               setStatus(data.status);
             }
           }
@@ -418,16 +418,20 @@ export default function Home() {
             <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto" />
             <div className="space-y-2">
               <h3 className="text-xl font-medium text-white">
-                {status === 'uploading' ? 'Uploading file...' : 
-                 status === 'queued' ? 'Waiting in queue...' : 
-                 'Separating vocals...'}
+                {message || (
+                  status === 'uploading' ? 'Uploading file...' : 
+                  (status === 'queued' || status === 'waiting' || status === 'delayed') ? 'Waiting in queue...' : 
+                  status === 'active' ? 'Starting separation...' :
+                  status === 'processing' ? 'Separating vocals...' :
+                  'Processing...'
+                )}
               </h3>
               <p className="text-neutral-400 text-sm">
                 This might take a few minutes depending on file size.
               </p>
             </div>
             
-            {status !== 'uploading' && status !== 'queued' && (
+            {status !== 'uploading' && status !== 'queued' && status !== 'waiting' && status !== 'delayed' && (
               <div className="space-y-4">
                 <div className="relative w-full bg-neutral-950 rounded-full h-3 overflow-hidden border border-neutral-800">
                   <div 

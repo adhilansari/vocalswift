@@ -25,7 +25,7 @@ export class AudioJobProcessor extends WorkerHost {
       mkdirSync(resultsDir);
     }
 
-    await job.updateProgress(10); // 10% - starting upload to python service
+    await job.updateProgress({ percent: 2, message: 'Initializing job...' }); // Initial progress
 
     try {
       // 1. Upload to Python FastAPI service
@@ -35,12 +35,14 @@ export class AudioJobProcessor extends WorkerHost {
       let uploadResponse;
       if (isYoutube) {
         this.logger.log(`Sending youtube URL to separation service...`);
+        await job.updateProgress({ percent: 5, message: 'Downloading audio from YouTube (this may take a minute)...' });
         uploadResponse = await fetch('http://localhost:8000/upload-youtube', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url, trim_silence: trimSilence }),
         });
       } else {
+        await job.updateProgress({ percent: 10, message: 'Uploading file to separation service...' });
         const formData = new FormData();
         formData.append('file', createReadStream(filePath));
         formData.append('trim_silence', String(trimSilence));
@@ -59,7 +61,7 @@ export class AudioJobProcessor extends WorkerHost {
       const uploadResult = await uploadResponse.json();
       const separationJobId = uploadResult.job_id;
 
-      await job.updateProgress(30); // 30% - file uploaded, separation started
+      await job.updateProgress({ percent: 30, message: 'Separating vocals (this may take a few minutes)...' }); // 30% - file uploaded, separation started
 
       // 2. Poll the python service for completion
       let isCompleted = false;
@@ -75,11 +77,11 @@ export class AudioJobProcessor extends WorkerHost {
         
         if (statusResult.status === 'completed') {
           isCompleted = true;
-          await job.updateProgress(80); // 80% - separation done, downloading result
+          await job.updateProgress({ percent: 80, message: 'Finalizing and downloading result...' }); // 80% - separation done, downloading result
         } else if (statusResult.status === 'processing') {
           // Fake progress between 30 and 80 based on time
           const currentProgress = Math.min(75, 30 + (attempts * 0.5));
-          await job.updateProgress(Math.floor(currentProgress));
+          await job.updateProgress({ percent: Math.floor(currentProgress), message: 'Separating vocals (this may take a few minutes)...' });
         } else if (statusResult.status === 'not_found') {
           throw new Error('Separation job not found on python service');
         } else if (statusResult.status === 'failed') {
@@ -110,7 +112,7 @@ export class AudioJobProcessor extends WorkerHost {
         throw new Error('Empty response body');
       }
 
-      await job.updateProgress(100);
+      await job.updateProgress({ percent: 100, message: 'Done' });
       this.logger.log(`Job ${job.id} completed. Result saved to ${finalFilePath}`);
       
       return {
