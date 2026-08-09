@@ -141,6 +141,42 @@ async def upload_youtube(req: YoutubeRequest, background_tasks: BackgroundTasks)
     
     return {"job_id": job_id, "status": "processing"}
 
+class YoutubePreviewRequest(BaseModel):
+    url: str
+
+@app.post("/download-youtube-preview")
+async def download_youtube_preview(req: YoutubePreviewRequest):
+    job_id = str(uuid.uuid4())
+    
+    try:
+        import yt_dlp
+        ydl_opts = {
+            "format": "bestaudio/best",
+            "outtmpl": os.path.join(UPLOAD_DIR, f"{job_id}.%(ext)s"),
+            "postprocessors": [
+                {
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "mp3",
+                    "preferredquality": "192",
+                }
+            ],
+            "noplaylist": True,
+            "quiet": True,
+            "no_warnings": True,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(req.url, download=False)
+            duration = info.get("duration") or 0
+            if duration > 15 * 60:
+                raise HTTPException(status_code=400, detail="Video is too long (Max 15 minutes).")
+            ydl.download([req.url])
+            
+    except Exception as e:
+        print(f"Error downloading youtube preview: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+        
+    return {"job_id": job_id, "status": "completed"}
+
 @app.get("/status/{job_id}")
 async def get_status(job_id: str):
     output_folder = os.path.join(OUTPUT_DIR, job_id)
@@ -170,6 +206,17 @@ async def download_file(job_id: str):
         )
     
     raise HTTPException(status_code=404, detail="File not ready or not found")
+
+@app.get("/raw-download/{job_id}")
+async def download_raw_file(job_id: str):
+    file_path = os.path.join(UPLOAD_DIR, f"{job_id}.mp3")
+    if os.path.exists(file_path):
+        return FileResponse(
+            path=file_path, 
+            filename=f"raw_{job_id}.mp3",
+            media_type="audio/mpeg"
+        )
+    raise HTTPException(status_code=404, detail="File not found")
 
 @app.get("/")
 def read_root():

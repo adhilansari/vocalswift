@@ -34,6 +34,18 @@ export class JobService {
     };
   }
 
+  async createYoutubePreviewJob(url: string) {
+    const job = await this.audioQueue.add('preview-youtube', {
+      isYoutubePreview: true,
+      url,
+    });
+    
+    return {
+      jobId: job.id,
+      status: 'queued'
+    };
+  }
+
   async getJobStatus(jobId: string) {
     const job = await this.audioQueue.getJob(jobId);
     
