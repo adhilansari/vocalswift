@@ -1,0 +1,27 @@
+# Node
+node_modules/
+dist/
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+
+# Next.js
+.next/
+out/
+build/
+
+# Application Specific
+uploads/
+outputs/
+results/
+backend/results/
+backend/uploads/
+separation-service/uploads/
+separation-service/outputs/
