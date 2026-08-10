@@ -11,11 +11,11 @@ export class AudioJobProcessor extends WorkerHost {
   private readonly logger = new Logger(AudioJobProcessor.name);
 
   async process(job: Job<any, any, string>): Promise<any> {
-    const { filePath, isYoutube, url } = job.data;
+    const { filePath, isYoutube, isYoutubePreview, url } = job.data;
     
     this.logger.log(`Processing job ${job.id}`);
 
-    if (!isYoutube && !existsSync(filePath)) {
+    if (!isYoutube && !isYoutubePreview && !existsSync(filePath)) {
       throw new Error(`File ${filePath} not found`);
     }
 
@@ -33,7 +33,33 @@ export class AudioJobProcessor extends WorkerHost {
       const { trimSilence = false, isYoutube, url } = job.data;
       
       let uploadResponse;
-      if (isYoutube) {
+      if (isYoutubePreview) {
+        this.logger.log(`Downloading youtube preview...`);
+        await job.updateProgress({ percent: 50, message: 'Downloading audio from YouTube...' });
+        uploadResponse = await fetch('http://localhost:8000/download-youtube-preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url }),
+        });
+        
+        if (!uploadResponse.ok) {
+           const errResult = await uploadResponse.json().catch(() => ({}));
+           throw new Error(errResult.detail || `Failed to download youtube preview: ${uploadResponse.statusText}`);
+        }
+        
+        const result = await uploadResponse.json();
+        await job.updateProgress({ percent: 100, message: 'Done' });
+        
+        return {
+          // The python service saves it to UPLOAD_DIR as {job_id}.mp3 or similar
+          // Actually, yt_dlp output template might use the video's original ext, but let's assume it returns { job_id, status }
+          // We can serve it from the python service directly via /raw-download/{job_id} or let python service do it.
+          // Wait, python service returns {"job_id": job_id, "status": "completed"}
+          previewId: result.job_id,
+          previewUrl: `http://localhost:8000/raw-download/${result.job_id}`
+        };
+      }
+      else if (isYoutube) {
         this.logger.log(`Sending youtube URL to separation service...`);
         await job.updateProgress({ percent: 5, message: 'Downloading audio from YouTube (this may take a minute)...' });
         uploadResponse = await fetch('http://localhost:8000/upload-youtube', {

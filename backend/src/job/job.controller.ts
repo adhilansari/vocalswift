@@ -15,7 +15,7 @@ const execAsync = promisify(exec);
 export class JobController {
   constructor(private readonly jobService: JobService) {}
 
-  @Post('upload')
+  @Post('upload-preview')
   @UseInterceptors(FileInterceptor('file', {
     storage: diskStorage({
       destination: './uploads',
@@ -25,22 +25,77 @@ export class JobController {
       }
     })
   }))
-  async uploadFile(@UploadedFile() file: Express.Multer.File, @Body('trimSilence') trimSilence?: string) {
+  async uploadPreviewFile(@UploadedFile() file: Express.Multer.File) {
     if (!file) {
       return { error: 'No file uploaded' };
     }
     
-    const isTrimSilence = trimSilence === 'true';
-    const job = await this.jobService.createJob(file.path, 'mp3', isTrimSilence);
-    return job;
+    return {
+      previewId: file.filename,
+      previewUrl: `/api/jobs/preview/${file.filename}`,
+      status: 'completed'
+    };
   }
 
-  @Post('youtube')
-  async submitYoutube(@Body('url') url: string, @Body('trimSilence') trimSilence?: boolean) {
+  @Get('preview/:filename')
+  async getPreviewFile(@Param('filename') filename: string, @Res() res: Response) {
+    const filePath = join(process.cwd(), 'uploads', filename);
+    if (!existsSync(filePath)) {
+      return res.status(HttpStatus.NOT_FOUND).json({ error: 'File not found' });
+    }
+    res.set({
+      'Content-Type': 'audio/mpeg',
+    });
+    const fileStream = createReadStream(filePath);
+    fileStream.pipe(res);
+  }
+
+  @Post('youtube-preview')
+  async submitYoutubePreview(@Body('url') url: string) {
     if (!url) {
       return { error: 'No YouTube URL provided' };
     }
-    const job = await this.jobService.createYoutubeJob(url, trimSilence);
+    const job = await this.jobService.createYoutubePreviewJob(url);
+    return job;
+  }
+
+  @Post('isolate')
+  async isolateAudio(
+    @Body('fileId') fileId: string,
+    @Body('isYoutube') isYoutube: boolean,
+    @Body('trimSilence') trimSilence?: boolean,
+    @Body('start') start?: number,
+    @Body('end') end?: number
+  ) {
+    if (!fileId) return { error: 'No fileId provided' };
+
+    let targetFilePath = join(process.cwd(), 'uploads', isYoutube ? `${fileId}.mp3` : fileId);
+
+    // If it's a youtube preview, NestJS might not have it locally yet!
+    if (isYoutube && !existsSync(targetFilePath)) {
+       // Download from Python service
+       const fetch = require('node-fetch');
+       const { pipeline } = require('stream/promises');
+       const fs = require('fs');
+       const res = await fetch(`http://localhost:8000/raw-download/${fileId}`);
+       if (!res.ok) return { error: 'Failed to fetch youtube preview from separation service' };
+       await pipeline(res.body, fs.createWriteStream(targetFilePath));
+    }
+
+    // Trim it if requested
+    if (start !== undefined && end !== undefined) {
+      const trimmedPath = join(process.cwd(), 'uploads', `trimmed_${fileId}.mp3`);
+      try {
+        await execAsync(`ffmpeg -y -i "${targetFilePath}" -ss ${start} -to ${end} "${trimmedPath}"`);
+        targetFilePath = trimmedPath; // Use the trimmed file
+      } catch (e) {
+         console.error('Trim error:', e);
+         return { error: 'Failed to trim audio before isolation' };
+      }
+    }
+
+    // Now we create the separation job!
+    const job = await this.jobService.createJob(targetFilePath, 'mp3', !!trimSilence);
     return job;
   }
 

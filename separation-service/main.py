@@ -125,6 +125,7 @@ async def upload_youtube(req: YoutubeRequest, background_tasks: BackgroundTasks)
             "noplaylist": True,
             "quiet": True,
             "no_warnings": True,
+            "extractor_args": {"youtube": ["player_client=ios", "player_client=android", "player_client=web"]},
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(req.url, download=False)
@@ -163,6 +164,7 @@ async def download_youtube_preview(req: YoutubePreviewRequest):
             "noplaylist": True,
             "quiet": True,
             "no_warnings": True,
+            "extractor_args": {"youtube": ["player_client=ios", "player_client=android", "player_client=web"]},
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(req.url, download=False)

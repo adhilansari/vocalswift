@@ -75,6 +75,8 @@ export class JobService {
       progress,
       message,
       resultUrl: returnvalue?.resultUrl,
+      previewUrl: returnvalue?.previewUrl,
+      previewId: returnvalue?.previewId,
       error: failedReason
     };
   }
