@@ -1,3 +1,4 @@
+import { useEffect, useState, useCallback } from 'react';
 import { Download } from 'lucide-react';
 import { useJobStore } from '../store/useJobStore';
 import { AudioPlayer } from './AudioPlayer';
@@ -34,7 +35,7 @@ export function JobHistory() {
     <div className="w-full max-w-2xl mt-12 bg-neutral-900/40 rounded-3xl p-6 md:p-8 border border-neutral-800/50 backdrop-blur-xl animate-in fade-in slide-in-from-bottom-8">
       <h3 className="text-xl font-bold text-white mb-6">Your Previous Vocals</h3>
       <div className="space-y-3">
-        {history.map((job) => (
+        {history.map((job: any) => (
           <div key={job.jobId} className="flex items-center justify-between bg-neutral-950/50 p-4 rounded-xl border border-neutral-800 hover:border-neutral-700 transition-colors">
             <div className="overflow-hidden flex-1 mr-4">
               <p className="text-sm font-semibold text-neutral-200 truncate" title={job.name}>{job.name}</p>
