@@ -138,7 +138,6 @@ def process_audio(
         
         # Ensure we use the venv demucs so we get the CUDA version!
         # Ensure we use the venv demucs so we get the CUDA version!
-        import os
         demucs_cmd = os.path.abspath(os.path.join(os.path.dirname(__file__), "venv", "Scripts", "demucs.exe"))
             
         cmd = [demucs_cmd, "--two-stems", "vocals", "-n", model_name, "-o", output_folder, file_path, "--mp3", "--mp3-bitrate", "320", "-d", "cuda"]
