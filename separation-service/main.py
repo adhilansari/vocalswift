@@ -221,7 +221,7 @@ async def _periodic_cleanup(interval_sec: int = 3600) -> None:
 # Core processing
 # --------------------------------------------------------------------------
 
-def _run_demucs(file_path: Path, output_folder: Path, model_name: str) -> Path:
+def _run_demucs(file_path: Path, output_folder: Path, model_name: str, device: str = None) -> Path:
     cmd = [
         DEMUCS_BIN,
         "--two-stems", "vocals",
@@ -230,7 +230,7 @@ def _run_demucs(file_path: Path, output_folder: Path, model_name: str) -> Path:
         str(file_path),
         "--mp3",
         "--mp3-bitrate", "320",
-        "-d", DEMUCS_DEVICE,
+        "-d", device or DEMUCS_DEVICE,
     ]
     write_progress(output_folder, "Starting separation engine...", 0)
 
@@ -305,7 +305,18 @@ def process_audio(
         logger.info("Starting Demucs processing for %s", file_path)
         model_name = "mdx_extra_q" if fast_mode else "htdemucs_ft"
 
-        vocals_mp3_path = _run_demucs(file_path, output_folder, model_name)
+        try:
+            vocals_mp3_path = _run_demucs(file_path, output_folder, model_name)
+        except subprocess.CalledProcessError as e:
+            # Catch 0xC0000409 (-1073740791 / 3221226505) which is PyTorch CUDA OOM / stack buffer overrun on Windows
+            if e.returncode in (3221226505, -1073740791) and DEMUCS_DEVICE != "cpu":
+                logger.warning("CUDA/GPU crash detected! Retrying with CPU fallback...")
+                write_progress(output_folder, "GPU Out of Memory, switching to CPU (slower)...", 0)
+                if (output_folder / model_name).exists():
+                    shutil.rmtree(output_folder / model_name, ignore_errors=True)
+                vocals_mp3_path = _run_demucs(file_path, output_folder, model_name, device="cpu")
+            else:
+                raise
         model_dir_to_clean = output_folder / model_name
         working_path = vocals_mp3_path
 
