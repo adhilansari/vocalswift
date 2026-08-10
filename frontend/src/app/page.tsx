@@ -59,8 +59,10 @@ export default function Home() {
           setTrimRegion({ start: region.start, end: region.end });
         });
 
-        const audioUrl = status === 'previewing' ? previewUrl : `http://localhost:3001${resultUrl}`;
-        wavesurfer.current.load(audioUrl.startsWith('http') ? audioUrl : `http://localhost:3001${audioUrl}`);
+        const audioUrl = status === 'previewing' ? previewUrl : resultUrl ? `http://localhost:3001${resultUrl}` : null;
+        if (audioUrl) {
+          wavesurfer.current.load(audioUrl.startsWith('http') ? audioUrl : `http://localhost:3001${audioUrl}`);
+        }
         
         wavesurfer.current.on('finish', () => setIsPlaying(false));
       }
@@ -133,7 +135,6 @@ export default function Home() {
     }
   };
 
-  const [systemStats, setSystemStats] = useState<{cpu: number, ram: number} | null>(null);
   const [playbackRate, setPlaybackRate] = useState(1);
 
   const handlePlaybackRateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -142,41 +143,53 @@ export default function Home() {
     if (wavesurfer.current) wavesurfer.current.setPlaybackRate(rate);
   };
 
-  // Status Polling for Separation and YT Download
+  // Status Polling for Separation and YT Download using Server-Sent Events (SSE)
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (jobId && (status === 'uploading' || status === 'queued' || status === 'waiting' || status === 'delayed' || status === 'active' || status === 'processing')) {
-      interval = setInterval(async () => {
-        try {
-          const res = await fetch(`http://localhost:3001/api/jobs/status/${jobId}`);
-          if (res.ok) {
-            const data = await res.json();
-            if (data.status === 'completed') {
-              clearInterval(interval);
-              if (data.previewUrl) {
-                // It was a youtube preview job
-                setPreview(null, data.previewUrl, data.previewId);
-              } else if (data.resultUrl) {
-                setResult(data.resultUrl);
-              }
-            } else if (data.status === 'failed') {
-              setError(data.error || 'Job failed');
-              clearInterval(interval);
-            } else {
-              // Ensure we don't accidentally render stringified JSON
-              const msg = typeof data.message === 'string' && data.message.startsWith('{') ? 'Processing...' : data.message;
-              setProgress(data.progress || 0, msg);
-              setStatus(data.status);
-            }
+    if (!jobId || status === 'completed' || status === 'failed' || status === 'previewing') return;
+
+    const eventSource = new EventSource(`http://localhost:3001/api/jobs/events/${jobId}`);
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.status === 'completed') {
+          if (data.previewUrl) {
+            setPreview(null, data.previewUrl, data.previewId);
+          } else if (data.resultUrl) {
+            setResult(data.resultUrl);
           }
-          if (status === 'processing' || status === 'active') {
-             const statsRes = await fetch('http://localhost:8000/system-stats');
-             if (statsRes.ok) setSystemStats(await statsRes.json());
+          eventSource.close();
+        } else if (data.status === 'failed') {
+          setError(data.error || 'Job failed');
+          eventSource.close();
+        } else {
+          let progressVal = 0;
+          let msg = 'Processing...';
+          if (data.progress !== undefined) {
+             if (typeof data.progress === 'number') {
+                progressVal = data.progress;
+             } else {
+                progressVal = data.progress.percent || 0;
+                msg = data.progress.message || msg;
+             }
           }
-        } catch (err) { console.error(err); }
-      }, 2000);
-    }
-    return () => clearInterval(interval);
+          setProgress(progressVal, msg);
+          setStatus(data.status);
+        }
+      } catch (err) {
+        console.error('Error parsing SSE data', err);
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.error('SSE Error:', err);
+      eventSource.close();
+      // Optional: fallback to polling or just show error
+    };
+
+    return () => {
+      eventSource.close();
+    };
   }, [jobId, status, setStatus, setProgress, setResult, setPreview, setError]);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
@@ -493,9 +506,13 @@ export default function Home() {
               </p>
             </div>
             
-            {(status === 'processing' || status === 'active') && (
-              <div className="space-y-5 max-w-sm mx-auto">
-                <div className="relative w-full bg-neutral-950 rounded-full h-4 overflow-hidden border border-neutral-800 shadow-inner">
+            {(status === 'processing' || status === 'active' || status === 'uploading' || status === 'queued') && (
+              <div className="space-y-4 max-w-sm mx-auto">
+                <div className="flex justify-between items-end mb-1">
+                  <span className="text-sm font-semibold text-neutral-300">Progress</span>
+                  <span className="text-sm font-bold text-blue-400">{Math.round(progress)}%</span>
+                </div>
+                <div className="relative w-full bg-neutral-950 rounded-full h-5 overflow-hidden border border-neutral-800 shadow-inner">
                   <div 
                     className="absolute top-0 left-0 h-full transition-all duration-700 ease-out bg-gradient-to-r from-blue-600 via-violet-500 to-blue-600 animate-[pulse_2s_ease-in-out_infinite]" 
                     style={{ width: `${progress}%`, backgroundSize: '200% 100%' }}
@@ -505,13 +522,6 @@ export default function Home() {
                     style={{ width: `${progress}%` }}
                   />
                 </div>
-                
-                {systemStats && (
-                  <div className="flex justify-between text-xs font-bold text-neutral-500 px-4 py-2 bg-neutral-950/50 rounded-lg border border-neutral-800/50 animate-in fade-in">
-                    <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div> CPU: {systemStats.cpu}%</span>
-                    <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-violet-500"></div> RAM: {systemStats.ram}%</span>
-                  </div>
-                )}
               </div>
             )}
           </div>

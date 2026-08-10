@@ -92,10 +92,10 @@ export class AudioJobProcessor extends WorkerHost {
       // 2. Poll the python service for completion
       let isCompleted = false;
       let attempts = 0;
-      const maxAttempts = 600; // 600 * 5s = 50 minutes max waiting for CPU
+      const maxAttempts = 1500; // 1500 * 2s = 50 minutes max waiting for CPU
       
       while (!isCompleted && attempts < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, 5000)); // wait 5 seconds
+        await new Promise(resolve => setTimeout(resolve, 2000)); // wait 2 seconds
         attempts++;
         
         const statusResponse = await fetch(`http://localhost:8000/status/${separationJobId}`);
@@ -103,15 +103,15 @@ export class AudioJobProcessor extends WorkerHost {
         
         if (statusResult.status === 'completed') {
           isCompleted = true;
-          await job.updateProgress({ percent: 80, message: 'Finalizing and downloading result...' }); // 80% - separation done, downloading result
+          await job.updateProgress({ percent: 100, message: 'Processing complete!' });
         } else if (statusResult.status === 'processing') {
-          // Fake progress between 30 and 80 based on time
-          const currentProgress = Math.min(75, 30 + (attempts * 0.5));
-          await job.updateProgress({ percent: Math.floor(currentProgress), message: 'Separating vocals (this may take a few minutes)...' });
+          const currentProgress = statusResult.progress !== undefined ? statusResult.progress : 50;
+          const msg = statusResult.message || 'Processing...';
+          await job.updateProgress({ percent: currentProgress, message: msg });
+        } else if (statusResult.status === 'failed') {
+          throw new Error('Separation process failed on python side');
         } else if (statusResult.status === 'not_found') {
           throw new Error('Separation job not found on python service');
-        } else if (statusResult.status === 'failed') {
-          throw new Error('Separation process failed on python service');
         }
       }
 

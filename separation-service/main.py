@@ -61,7 +61,33 @@ def process_audio(file_path: str, output_id: str, format: str = "mp3", trim_sile
             "-o", output_folder,
             file_path
         ]
-        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        import json
+        import re
+        
+        # Initial progress
+        with open(os.path.join(output_folder, "progress.json"), "w") as f:
+            json.dump({"status": "processing", "message": "Starting separation engine...", "progress": 0}, f)
+            
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            universal_newlines=True
+        )
+        
+        for line in process.stdout:
+            # tqdm format usually: 45%|████...
+            match = re.search(r'(\d+)%', line)
+            if match:
+                progress_val = int(match.group(1))
+                with open(os.path.join(output_folder, "progress.json"), "w") as f:
+                    json.dump({"status": "processing", "message": f"Separating vocals... {progress_val}%", "progress": progress_val}, f)
+        
+        process.wait()
+        if process.returncode != 0:
+            raise subprocess.CalledProcessError(process.returncode, cmd, output="Separation failed")
         
         basename = os.path.splitext(os.path.basename(file_path))[0]
         vocals_mp3_path = os.path.join(output_folder, "htdemucs_ft", basename, "vocals.mp3")
@@ -112,6 +138,13 @@ async def upload_youtube(req: YoutubeRequest, background_tasks: BackgroundTasks)
     
     try:
         import yt_dlp
+        import json
+        
+        output_folder = os.path.join(OUTPUT_DIR, job_id)
+        os.makedirs(output_folder, exist_ok=True)
+        with open(os.path.join(output_folder, "progress.json"), "w") as f:
+            json.dump({"status": "processing", "message": "Downloading YouTube audio... 0%", "progress": 0}, f)
+            
         ydl_opts = {
             "format": "bestaudio/best",
             "outtmpl": os.path.join(UPLOAD_DIR, f"{job_id}.%(ext)s"),
@@ -133,6 +166,9 @@ async def upload_youtube(req: YoutubeRequest, background_tasks: BackgroundTasks)
             if duration > 15 * 60:
                 raise HTTPException(status_code=400, detail="Video is too long (Max 15 minutes).")
             ydl.download([req.url])
+            
+        with open(os.path.join(output_folder, "progress.json"), "w") as f:
+            json.dump({"status": "processing", "message": "Download complete. Queued for separation...", "progress": 10}, f)
             
     except Exception as e:
         print(f"Error downloading youtube: {e}")
@@ -189,6 +225,17 @@ async def get_status(job_id: str):
     
     if os.path.exists(os.path.join(output_folder, "error.txt")):
         return {"job_id": job_id, "status": "failed"}
+
+    progress_file = os.path.join(output_folder, "progress.json")
+    if os.path.exists(progress_file):
+        try:
+            import json
+            with open(progress_file, "r") as f:
+                data = json.load(f)
+                data["job_id"] = job_id
+                return data
+        except Exception:
+            pass
 
     if os.path.exists(output_folder):
          return {"job_id": job_id, "status": "processing"}

@@ -1,4 +1,4 @@
-import { Controller, Post, UseInterceptors, UploadedFile, Get, Param, Res, HttpStatus, Body } from '@nestjs/common';
+import { Controller, Post, UseInterceptors, UploadedFile, Get, Param, Res, HttpStatus, Body, Sse } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JobService } from './job.service';
 import { diskStorage } from 'multer';
@@ -102,6 +102,38 @@ export class JobController {
   @Get('status/:id')
   async getStatus(@Param('id') id: string) {
     return this.jobService.getJobStatus(id);
+  }
+
+  @Sse('events/:id')
+  getEvents(@Param('id') id: string): any {
+    const { Observable, interval } = require('rxjs');
+    const { switchMap, takeWhile, filter, map } = require('rxjs/operators');
+    
+    let lastStatus = '';
+    let lastProgress = -1;
+    let lastMessage = '';
+    
+    return interval(1000).pipe(
+      switchMap(async () => {
+        return await this.jobService.getJobStatus(id);
+      }),
+      takeWhile((status: any) => status.status !== 'completed' && status.status !== 'failed' && status.status !== 'not_found', true),
+      filter((status: any) => {
+         const progObj = status.progress as any;
+         const progNum = progObj ? (typeof progObj === 'number' ? progObj : progObj.percent) : 0;
+         const progMsg = progObj && progObj.message ? progObj.message : '';
+         if (status.status !== lastStatus || progNum !== lastProgress || progMsg !== lastMessage) {
+            lastStatus = status.status;
+            lastProgress = progNum;
+            lastMessage = progMsg;
+            return true;
+         }
+         return false;
+      }),
+      map((status: any) => {
+        return { data: status };
+      })
+    );
   }
 
   @Get('download/:id')
