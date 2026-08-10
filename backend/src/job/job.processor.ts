@@ -108,7 +108,7 @@ export class AudioJobProcessor extends WorkerHost {
       // 2. Poll the python service for completion
       let isCompleted = false;
       let attempts = 0;
-      const maxAttempts = 1500; // 1500 * 2s = 50 minutes max waiting for CPU
+      const maxAttempts = 10000; // 10000 * 2s = ~5.5 hours max waiting for CPU
       
       while (!isCompleted && attempts < maxAttempts) {
         await new Promise(resolve => setTimeout(resolve, 2000)); // wait 2 seconds
