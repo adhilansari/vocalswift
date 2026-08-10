@@ -7,7 +7,7 @@ import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.esm.js';
 export function WaveformEditor() {
   const { 
     jobId, status, resultUrl, previewUrl, previewId, previewFile, isYoutubeSource,
-    trimSilence, minGapSeconds, normalize, outputFormat,
+    trimSilence, minGapSeconds, normalize, outputFormat, fastMode,
     setStatus, setProgress, setResult, setError, reset, setJobId,
     setAdvancedSettings
   } = useJobStore();
@@ -87,6 +87,7 @@ export function WaveformEditor() {
         minGapSeconds,
         normalize,
         outputFormat,
+        fastMode,
         originalName: previewFile?.name
       };
       if (trimRegion) {
@@ -246,6 +247,19 @@ export function WaveformEditor() {
               <div>
                 <div className="font-medium text-white text-sm">Broadcast Normalization</div>
                 <div className="text-xs text-neutral-400 mt-1">Boosts and perfectly balances the volume of the isolated vocals.</div>
+              </div>
+            </label>
+
+            <label className="flex items-start gap-3 p-3 rounded-xl hover:bg-neutral-800/50 transition cursor-pointer border border-transparent hover:border-neutral-700/50">
+              <input 
+                type="checkbox" 
+                checked={fastMode} 
+                onChange={(e) => setAdvancedSettings({ fastMode: e.target.checked })}
+                className="mt-1 w-4 h-4 rounded border-neutral-600 text-violet-500 focus:ring-violet-500 bg-neutral-900"
+              />
+              <div>
+                <div className="font-medium text-white text-sm">Fast Mode (Speed over Quality)</div>
+                <div className="text-xs text-neutral-400 mt-1">Uses a faster, lighter AI model instead of the default studio-quality model.</div>
               </div>
             </label>
 

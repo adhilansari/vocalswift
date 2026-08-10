@@ -14,6 +14,7 @@ export class JobService {
     trimSilence: boolean = false,
     minGapSeconds: number = 3.0,
     normalize: boolean = true,
+    fastMode: boolean = false,
     originalName?: string
   ) {
     const job = await this.audioQueue.add('separate-vocals', {
@@ -22,6 +23,7 @@ export class JobService {
       trimSilence,
       minGapSeconds,
       normalize,
+      fastMode,
       originalName
     });
     

@@ -108,6 +108,7 @@ def process_audio(
     trim_silence: bool = False,
     min_gap_seconds: float = 3.0,
     normalize: bool = True,
+    fast_mode: bool = False,
 ):
     """
     Runs demucs on the input file and post-processes the result.
@@ -118,9 +119,10 @@ def process_audio(
     
     try:
         print(f"Starting Demucs processing for {file_path}")
+        model_name = "mdx_extra_q" if fast_mode else "htdemucs_ft"
         cmd = [
             "demucs",
-            "-n", "htdemucs_ft",
+            "-n", model_name,
             "--two-stems", "vocals",
             "--mp3",
             "--mp3-bitrate", "320",
@@ -172,7 +174,7 @@ def process_audio(
             raise subprocess.CalledProcessError(process.returncode, cmd, output="Separation failed")
         
         basename = os.path.splitext(os.path.basename(file_path))[0]
-        htdemucs_dir = os.path.join(output_folder, "htdemucs_ft")
+        htdemucs_dir = os.path.join(output_folder, model_name)
         vocals_mp3_path = os.path.join(htdemucs_dir, basename, "vocals.mp3")
         
         if not os.path.exists(vocals_mp3_path):
@@ -242,6 +244,7 @@ async def upload_file(
     min_gap_seconds: float = Form(3.0),
     normalize: bool = Form(True),
     output_format: str = Form("mp3"),
+    fast_mode: bool = Form(False),
 ):
     job_id = str(uuid.uuid4())
     file_ext = os.path.splitext(file.filename)[1]
@@ -250,8 +253,16 @@ async def upload_file(
     with open(save_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         
-    background_tasks.add_task(process_audio, save_path, job_id, output_format, trim_silence, min_gap_seconds, normalize)
-    
+    background_tasks.add_task(
+        process_audio, 
+        save_path, 
+        job_id, 
+        output_format,
+        trim_silence,
+        min_gap_seconds,
+        normalize,
+        fast_mode
+    )
     return {"job_id": job_id, "status": "processing"}
 
 class YoutubeRequest(BaseModel):
@@ -260,6 +271,7 @@ class YoutubeRequest(BaseModel):
     min_gap_seconds: float = 3.0
     normalize: bool = True
     output_format: str = "mp3"
+    fast_mode: bool = False
 
 @app.post("/upload-youtube")
 async def upload_youtube(req: YoutubeRequest, background_tasks: BackgroundTasks):
@@ -311,7 +323,7 @@ async def upload_youtube(req: YoutubeRequest, background_tasks: BackgroundTasks)
             raise e
         raise HTTPException(status_code=400, detail=str(e))
         
-    background_tasks.add_task(process_audio, save_path, job_id, req.output_format, req.trim_silence, req.min_gap_seconds, req.normalize)
+    background_tasks.add_task(process_audio, save_path, job_id, req.output_format, req.trim_silence, req.min_gap_seconds, req.normalize, req.fast_mode)
     
     return {"job_id": job_id, "status": "processing"}
 

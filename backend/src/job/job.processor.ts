@@ -30,14 +30,11 @@ export class AudioJobProcessor extends WorkerHost {
     try {
       // 1. Upload to Python FastAPI service
       // We assume the python service is running on localhost:8000
-      const { 
-        trimSilence = false, 
-        isYoutube, 
-        url, 
-        minGapSeconds = 3.0, 
-        normalize = true,
-        format = 'mp3' 
-      } = job.data;
+      const trimSilence = job.data.trimSilence || false;
+      const minGapSeconds = job.data.minGapSeconds || 3.0;
+      const normalize = job.data.normalize !== undefined ? job.data.normalize : true;
+      const fastMode = job.data.fastMode || false;
+      const format = job.data.format || 'mp3';
       
       let uploadResponse;
       if (isYoutubePreview) {
@@ -77,7 +74,8 @@ export class AudioJobProcessor extends WorkerHost {
             trim_silence: trimSilence,
             min_gap_seconds: minGapSeconds,
             normalize: normalize,
-            output_format: format
+            output_format: format,
+            fast_mode: fastMode
           }),
         });
       } else {
@@ -88,6 +86,7 @@ export class AudioJobProcessor extends WorkerHost {
         formData.append('min_gap_seconds', String(minGapSeconds));
         formData.append('normalize', String(normalize));
         formData.append('output_format', format);
+        formData.append('fast_mode', String(fastMode));
 
         this.logger.log(`Sending file to separation service...`);
         uploadResponse = await fetch('http://localhost:8000/upload', {

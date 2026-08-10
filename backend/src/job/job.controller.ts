@@ -69,6 +69,7 @@ export class JobController {
     @Body('outputFormat') outputFormat?: string,
     @Body('start') start?: number,
     @Body('end') end?: number,
+    @Body('fastMode') fastMode?: boolean,
     @Body('originalName') originalName?: string
   ) {
     if (!fileId) return { error: 'No fileId provided' };
@@ -105,6 +106,7 @@ export class JobController {
       !!trimSilence,
       minGapSeconds ?? 3.0,
       normalize ?? true,
+      !!fastMode,
       originalName
     );
     return job;

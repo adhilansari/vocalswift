@@ -18,6 +18,7 @@ interface JobState {
   minGapSeconds: number;
   normalize: boolean;
   outputFormat: string;
+  fastMode: boolean;
   isYoutubeSource: boolean;
   
   setJobId: (id: string) => void;
@@ -27,7 +28,7 @@ interface JobState {
   setError: (error: string | null) => void;
   setPreview: (file: File | null, url: string | null, id: string | null) => void;
   setIsYoutubeSource: (isYoutube: boolean) => void;
-  setAdvancedSettings: (settings: Partial<{trimSilence: boolean, minGapSeconds: number, normalize: boolean, outputFormat: string}>) => void;
+  setAdvancedSettings: (settings: Partial<{trimSilence: boolean, minGapSeconds: number, normalize: boolean, outputFormat: string, fastMode: boolean}>) => void;
   reset: () => void;
 }
 
@@ -46,6 +47,7 @@ export const useJobStore = create<JobState>((set) => ({
   minGapSeconds: 3.0,
   normalize: true,
   outputFormat: 'mp3',
+  fastMode: false,
   isYoutubeSource: false,
   
   setJobId: (id) => set({ jobId: id }),
