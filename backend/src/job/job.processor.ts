@@ -135,6 +135,7 @@ export class AudioJobProcessor extends WorkerHost {
       }
 
       // 3. Download the result from Python service
+      const fetch = (await import('node-fetch')).default;
       const downloadResponse = await fetch(`http://localhost:8000/download/${separationJobId}`);
       if (!downloadResponse.ok) {
          throw new Error(`Failed to download result: ${downloadResponse.statusText}`);
@@ -144,10 +145,15 @@ export class AudioJobProcessor extends WorkerHost {
       const finalFilePath = join(resultsDir, `${job.id}.${outputFormat}`);
       
       const fs = await import('fs');
+      const { pipeline } = await import('stream/promises');
       
-      const arrayBuffer = await downloadResponse.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-      await fs.promises.writeFile(finalFilePath, buffer);
+      // Node 18 native fetch body is a ReadableStream, we can use pipeline with node-fetch or native fetch
+      if (downloadResponse.body) {
+        await pipeline(downloadResponse.body as any, fs.createWriteStream(finalFilePath));
+      } else {
+        const arrayBuffer = await downloadResponse.arrayBuffer();
+        await fs.promises.writeFile(finalFilePath, Buffer.from(arrayBuffer));
+      }
 
       await job.updateProgress({ percent: 100, message: 'Done' });
       this.logger.log(`Job ${job.id} completed. Result saved to ${finalFilePath}`);
