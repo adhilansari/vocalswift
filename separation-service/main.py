@@ -113,11 +113,26 @@ def write_progress(output_folder: Path, message: str, progress: int, status: str
     try:
         with os.fdopen(fd, "w") as f:
             json.dump(payload, f)
-        os.replace(tmp_path, output_folder / "progress.json")
+        import time
+        for _ in range(5):
+            try:
+                os.replace(tmp_path, output_folder / "progress.json")
+                break
+            except OSError as e:
+                if getattr(e, "winerror", None) == 5:
+                    time.sleep(0.05)
+                else:
+                    raise
+        else:
+            pass # If we still can't write progress due to lock, ignore rather than crashing the job
     except Exception:
+        pass
+    finally:
         if os.path.exists(tmp_path):
-            os.remove(tmp_path)
-        raise
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
 
 
 def remove_no_vocal_gaps(
