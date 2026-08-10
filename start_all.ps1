@@ -1,6 +1,6 @@
 # Start Redis in Docker
 Write-Host "Starting Redis..."
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "docker run -p 6379:6379 redis"
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "docker run -d -p 6379:6379 redis"
 
 # Start Python Separation Service
 Write-Host "Starting Python Service..."
