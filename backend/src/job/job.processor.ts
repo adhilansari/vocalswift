@@ -14,6 +14,7 @@ export class AudioJobProcessor extends WorkerHost {
     const { filePath, isYoutube, isYoutubePreview, url } = job.data;
     
     this.logger.log(`Processing job ${job.id}`);
+    const fetch = (await import('node-fetch')).default;
 
     if (!isYoutube && !isYoutubePreview && !existsSync(filePath)) {
       throw new Error(`File ${filePath} not found`);
@@ -135,7 +136,6 @@ export class AudioJobProcessor extends WorkerHost {
       }
 
       // 3. Download the result from Python service
-      const fetch = (await import('node-fetch')).default;
       const downloadResponse = await fetch(`http://localhost:8000/download/${separationJobId}`);
       if (!downloadResponse.ok) {
          throw new Error(`Failed to download result: ${downloadResponse.statusText}`);
