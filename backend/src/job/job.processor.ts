@@ -175,18 +175,9 @@ export class AudioJobProcessor extends WorkerHost {
       const finalFilePath = join(resultsDir, `${job.id}.${outputFormat}`);
 
       const fs = await import('fs');
-      const { pipeline } = await import('stream/promises');
 
-      // Node 18 native fetch body is a ReadableStream, we can use pipeline with node-fetch or native fetch
-      if (downloadResponse.body) {
-        await pipeline(
-          downloadResponse.body as any,
-          fs.createWriteStream(finalFilePath),
-        );
-      } else {
-        const arrayBuffer = await downloadResponse.arrayBuffer();
-        await fs.promises.writeFile(finalFilePath, Buffer.from(arrayBuffer));
-      }
+      const arrayBuffer = await downloadResponse.arrayBuffer();
+      await fs.promises.writeFile(finalFilePath, Buffer.from(arrayBuffer));
 
       await job.updateProgress({ percent: 100, message: 'Done' });
       this.logger.log(
