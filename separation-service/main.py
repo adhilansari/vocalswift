@@ -136,6 +136,13 @@ def process_audio(
             with open(os.path.join(output_folder, "progress.json"), "w") as f:
                 json.dump({"status": "processing", "message": message, "progress": progress}, f)
         
+        # Ensure we use the venv demucs so we get the CUDA version!
+        # Ensure we use the venv demucs so we get the CUDA version!
+        import os
+        demucs_cmd = os.path.abspath(os.path.join(os.path.dirname(__file__), "venv", "Scripts", "demucs.exe"))
+            
+        cmd = [demucs_cmd, "--two-stems", "vocals", "-n", model_name, "-o", output_folder, file_path, "--mp3", "--mp3-bitrate", "320"]
+        
         write_progress("Starting separation engine...", 0)
             
         process = subprocess.Popen(
