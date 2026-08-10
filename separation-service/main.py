@@ -141,7 +141,7 @@ def process_audio(
         import os
         demucs_cmd = os.path.abspath(os.path.join(os.path.dirname(__file__), "venv", "Scripts", "demucs.exe"))
             
-        cmd = [demucs_cmd, "--two-stems", "vocals", "-n", model_name, "-o", output_folder, file_path, "--mp3", "--mp3-bitrate", "320"]
+        cmd = [demucs_cmd, "--two-stems", "vocals", "-n", model_name, "-o", output_folder, file_path, "--mp3", "--mp3-bitrate", "320", "-d", "cuda"]
         
         write_progress("Starting separation engine...", 0)
             
@@ -158,23 +158,34 @@ def process_audio(
         current_model_idx = 0
         last_progress_val = 0
         
-        for line in process.stdout:
-            match = re.search(r'(\d+)%', line)
-            if match:
-                progress_val = int(match.group(1))
+        # Read character by character to avoid \r vs \n deadlocks with tqdm
+        current_line = ""
+        while True:
+            char = process.stdout.read(1)
+            if not char:
+                break
+            
+            if char == '\r' or char == '\n':
+                match = re.search(r'(\d+)%', current_line)
+                if match:
+                    progress_val = int(match.group(1))
+                    
+                    if progress_val < last_progress_val - 50:
+                        current_model_idx += 1
+                    
+                    last_progress_val = progress_val
+                    safe_idx = min(current_model_idx, num_models - 1)
+                    
+                    model_budget = 70.0 / num_models
+                    base_progress = safe_idx * model_budget
+                    current_model_progress = (progress_val / 100.0) * model_budget
+                    
+                    total_progress = int(base_progress + current_model_progress)
+                    write_progress(f"Separating vocals... {progress_val}% (Pass {safe_idx + 1}/{num_models})", total_progress)
                 
-                if progress_val < last_progress_val - 50:
-                    current_model_idx += 1
-                
-                last_progress_val = progress_val
-                safe_idx = min(current_model_idx, num_models - 1)
-                
-                model_budget = 70.0 / num_models
-                base_progress = safe_idx * model_budget
-                current_model_progress = (progress_val / 100.0) * model_budget
-                
-                total_progress = int(base_progress + current_model_progress)
-                write_progress(f"Separating vocals... {progress_val}% (Pass {safe_idx + 1}/{num_models})", total_progress)
+                current_line = ""
+            else:
+                current_line += char
         
         process.wait()
         if process.returncode != 0:
