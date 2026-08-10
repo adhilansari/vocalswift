@@ -55,7 +55,7 @@ export function JobHistory() {
               />
               <a 
                 href={`http://localhost:3001${job.resultUrl}`} 
-                download
+                download={job.name ? `${job.name.replace(/\.[^/.]+$/, "")}_VF.${job.resultUrl?.split('.').pop() || 'mp3'}` : `vocals_VF.${job.resultUrl?.split('.').pop() || 'mp3'}`}
                 className="w-10 h-10 rounded-lg bg-neutral-800 hover:bg-neutral-700 flex items-center justify-center text-neutral-300 hover:text-white transition-all hover:scale-105 active:scale-95 shrink-0"
                 title="Download"
               >

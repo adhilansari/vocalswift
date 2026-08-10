@@ -356,7 +356,7 @@ export function WaveformEditor() {
           
           <a 
             href={`http://localhost:3001${resultUrl}`} 
-            download
+            download={previewFile?.name ? `${previewFile.name.replace(/\.[^/.]+$/, "")}_VF.${outputFormat}` : (isYoutubeSource ? `youtube_audio_VF.${outputFormat}` : `vocals_VF.${outputFormat}`)}
             className="flex-1 bg-white hover:bg-neutral-200 text-black font-bold py-3.5 px-6 rounded-xl flex items-center justify-center gap-2 transition-transform hover:scale-[1.02] active:scale-[0.98] shadow-[0_0_20px_rgba(255,255,255,0.1)]"
           >
             <Download className="w-5 h-5" />
