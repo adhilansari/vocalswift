@@ -123,7 +123,7 @@ def write_progress(output_folder: Path, message: str, progress: int, status: str
 def remove_no_vocal_gaps(
     audio: AudioSegment,
     min_gap_ms: int = 3000,
-    silence_thresh_offset_db: int = 16,
+    silence_thresh: int = -50,
     crossfade_ms: int = 80,
     padding_ms: int = 300,
 ) -> AudioSegment:
@@ -134,8 +134,7 @@ def remove_no_vocal_gaps(
     if len(audio) == 0:
         return audio
 
-    silence_thresh = audio.dBFS - silence_thresh_offset_db
-    nonsilent_ranges = detect_nonsilent(audio, min_silence_len=min_gap_ms, silence_thresh=silence_thresh)
+    nonsilent_ranges = detect_nonsilent(audio, min_silence_len=min_gap_ms, silence_thresh=silence_thresh, seek_step=100)
     if not nonsilent_ranges:
         return audio
 
@@ -264,7 +263,7 @@ def _run_demucs(file_path: Path, output_folder: Path, model_name: str) -> Path:
                     current_model_idx += 1
                 last_progress_val = progress_val
                 safe_idx = min(current_model_idx, num_models - 1)
-                model_budget = 70.0 / num_models
+                model_budget = 90.0 / num_models
                 total_progress = int(safe_idx * model_budget + (progress_val / 100.0) * model_budget)
                 write_progress(
                     output_folder,
@@ -311,7 +310,7 @@ def process_audio(
         working_path = vocals_mp3_path
 
         if trim_silence:
-            write_progress(output_folder, "Trimming instrumental-only sections...", 75)
+            write_progress(output_folder, "Trimming instrumental-only sections...", 90)
             audio = AudioSegment.from_file(working_path)
             trimmed = remove_no_vocal_gaps(audio, min_gap_ms=int(min_gap_seconds * 1000))
             trimmed_path = output_folder / "vocals_trimmed.wav"
@@ -319,12 +318,12 @@ def process_audio(
             working_path = trimmed_path
 
         if normalize:
-            write_progress(output_folder, "Normalizing loudness...", 90)
+            write_progress(output_folder, "Normalizing loudness...", 95)
             normalized_path = output_folder / "vocals_normalized.wav"
             loudness_normalize(working_path, normalized_path)
             working_path = normalized_path
 
-        write_progress(output_folder, "Finalizing...", 95)
+        write_progress(output_folder, "Finalizing...", 98)
         ext = "mp3" if output_format == "mp3" else "wav"
         final_output_path = output_folder / f"final_vocals.{ext}"
 
