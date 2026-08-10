@@ -243,4 +243,38 @@ export class JobController {
       return { error: 'Silence trim failed' };
     }
   }
+  @Post('cut/:id')
+  async cutResult(@Param('id') id: string, @Body('start') start: number, @Body('end') end: number) {
+    const mp3Path = join(process.cwd(), 'results', `${id}.mp3`);
+    const wavPath = join(process.cwd(), 'results', `${id}.wav`);
+    
+    let filePath = mp3Path;
+    let format = 'mp3';
+    if (existsSync(mp3Path)) {
+        filePath = mp3Path;
+    } else if (existsSync(wavPath)) {
+        filePath = wavPath;
+        format = 'wav';
+    } else {
+      return { error: 'File not found' };
+    }
+    
+    const cutId = `${id}_cut_${Math.floor(start)}_${Math.floor(end)}`;
+    const cutPath = join(process.cwd(), 'results', `${cutId}.${format}`);
+    
+    try {
+      if (start <= 0.1) {
+        // If cut starts at 0, just trim from `end` to end of file
+        await execAsync(`ffmpeg -y -i "${filePath}" -ss ${end} "${cutPath}"`);
+      } else {
+        // Cut out the middle portion and concat the rest
+        const filter = `[0:a]atrim=start=0:end=${start},asetpts=PTS-STARTPTS[part1];[0:a]atrim=start=${end},asetpts=PTS-STARTPTS[part2];[part1][part2]concat=n=2:v=0:a=1[out]`;
+        await execAsync(`ffmpeg -y -i "${filePath}" -filter_complex "${filter}" -map "[out]" "${cutPath}"`);
+      }
+      return { resultUrl: `/api/jobs/download/${cutId}` };
+    } catch (e) {
+      console.error('Cut failed:', e);
+      return { error: 'Cut failed' };
+    }
+  }
 }

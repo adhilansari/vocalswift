@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useJobStore } from '../store/useJobStore';
-import { Play, Pause, Scissors, RefreshCw, Loader2, Download, Check, Wand2 } from 'lucide-react';
+import { Play, Pause, Scissors, RefreshCw, Loader2, Download, Check, Wand2, Crop, Trash2 } from 'lucide-react';
 import WaveSurfer from 'wavesurfer.js';
 import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.esm.js';
 
@@ -131,6 +131,32 @@ export function WaveformEditor() {
       }
     } catch (err) {
       setError('Failed to trim audio.');
+    } finally {
+      setIsTrimming(false);
+    }
+  };
+
+  const handleCut = async () => {
+    if (!trimRegion || !jobId) return;
+    setIsTrimming(true);
+    setError(null);
+    try {
+      const res = await fetch(`http://localhost:3001/api/jobs/cut/${jobId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ start: trimRegion.start, end: trimRegion.end })
+      });
+      if (!res.ok) throw new Error('Cut failed');
+      const data = await res.json();
+      if (data.resultUrl) {
+        setResult(data.resultUrl);
+        setTrimRegion(null);
+        if (wsRegions.current) wsRegions.current.clearRegions();
+      } else {
+        throw new Error(data.error || 'Cut failed');
+      }
+    } catch (err) {
+      setError('Failed to cut audio.');
     } finally {
       setIsTrimming(false);
     }
@@ -334,14 +360,26 @@ export function WaveformEditor() {
 
         <div className="flex flex-col sm:flex-row gap-4">
           {trimRegion ? (
-            <button 
-              onClick={handleTrim}
-              disabled={isTrimming}
-              className="bg-neutral-800 hover:bg-neutral-700 text-white font-semibold py-3.5 px-6 rounded-xl flex items-center justify-center gap-2 transition-all hover:shadow-lg disabled:opacity-50"
-            >
-              {isTrimming ? <Loader2 className="w-5 h-5 animate-spin" /> : <Scissors className="w-5 h-5" />}
-              Trim
-            </button>
+            <div className="flex gap-2 bg-neutral-800 p-1 rounded-xl">
+              <button 
+                onClick={handleTrim}
+                disabled={isTrimming}
+                className="hover:bg-neutral-700 text-white font-semibold py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 transition-all hover:shadow-lg disabled:opacity-50"
+                title="Keep only the selected region"
+              >
+                {isTrimming ? <Loader2 className="w-5 h-5 animate-spin" /> : <Crop className="w-5 h-5" />}
+                Keep Selection
+              </button>
+              <button 
+                onClick={handleCut}
+                disabled={isTrimming}
+                className="hover:bg-neutral-700 text-rose-400 hover:text-rose-300 font-semibold py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 transition-all hover:shadow-lg disabled:opacity-50"
+                title="Delete the selected region"
+              >
+                {isTrimming ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
+                Delete Selection
+              </button>
+            </div>
           ) : (
             <button 
               onClick={handleAutoTrimSilence}
