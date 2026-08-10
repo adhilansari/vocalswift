@@ -68,7 +68,8 @@ export class JobController {
     @Body('normalize') normalize?: boolean,
     @Body('outputFormat') outputFormat?: string,
     @Body('start') start?: number,
-    @Body('end') end?: number
+    @Body('end') end?: number,
+    @Body('originalName') originalName?: string
   ) {
     if (!fileId) return { error: 'No fileId provided' };
 
@@ -103,7 +104,8 @@ export class JobController {
       outputFormat || 'mp3', 
       !!trimSilence,
       minGapSeconds ?? 3.0,
-      normalize ?? true
+      normalize ?? true,
+      originalName
     );
     return job;
   }
@@ -169,9 +171,16 @@ export class JobController {
       return res.status(HttpStatus.NOT_FOUND).json({ error: 'File not found or not ready' });
     }
     
+    const job = await this.jobService.getRawJob(id);
+    let originalName = 'vocals';
+    if (job && job.data) {
+       originalName = job.data.isYoutube ? 'youtube_audio' : (job.data.originalName || 'vocals');
+    }
+    originalName = originalName.replace(/\.[^/.]+$/, "");
+    
     res.set({
       'Content-Type': contentType,
-      'Content-Disposition': `attachment; filename="vocals-${id}.${format}"`,
+      'Content-Disposition': `attachment; filename="${originalName}_VF.${format}"`,
     });
     
     const fileStream = createReadStream(filePath);

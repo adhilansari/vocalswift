@@ -6,7 +6,7 @@ import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.esm.js';
 
 export function WaveformEditor() {
   const { 
-    jobId, status, resultUrl, previewUrl, previewId, isYoutubeSource,
+    jobId, status, resultUrl, previewUrl, previewId, previewFile, isYoutubeSource,
     trimSilence, minGapSeconds, normalize, outputFormat,
     setStatus, setProgress, setResult, setError, reset, setJobId,
     setAdvancedSettings
@@ -87,6 +87,7 @@ export function WaveformEditor() {
         minGapSeconds,
         normalize,
         outputFormat,
+        originalName: previewFile?.name
       };
       if (trimRegion) {
         body.start = trimRegion.start;

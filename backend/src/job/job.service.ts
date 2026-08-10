@@ -13,14 +13,16 @@ export class JobService {
     format: string = 'mp3', 
     trimSilence: boolean = false,
     minGapSeconds: number = 3.0,
-    normalize: boolean = true
+    normalize: boolean = true,
+    originalName?: string
   ) {
     const job = await this.audioQueue.add('separate-vocals', {
       filePath,
       format,
       trimSilence,
       minGapSeconds,
-      normalize
+      normalize,
+      originalName
     });
     
     return {
@@ -108,5 +110,9 @@ export class JobService {
       console.error('Failed to fetch history', err);
       return [];
     }
+  }
+
+  async getRawJob(jobId: string) {
+    return this.audioQueue.getJob(jobId);
   }
 }
