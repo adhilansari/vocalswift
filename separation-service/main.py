@@ -42,7 +42,73 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 class YouTubeRequest(BaseModel):
     url: str
 
-def process_audio(file_path: str, output_id: str, format: str = "mp3", trim_silence: bool = False):
+# -----------------------------------------------------------------------
+# Silence / no-vocal-gap trimming
+# -----------------------------------------------------------------------
+from pydub import AudioSegment
+from pydub.silence import detect_nonsilent
+
+def remove_no_vocal_gaps(
+    audio: AudioSegment,
+    min_gap_ms: int = 3000,
+    silence_thresh_offset_db: int = 16,
+    crossfade_ms: int = 80,
+    padding_ms: int = 300,
+) -> AudioSegment:
+    """
+    Cuts out long instrumental-only stretches from an isolated vocal track,
+    while keeping short natural pauses between vocal lines intact.
+    """
+    if len(audio) == 0:
+        return audio
+
+    silence_thresh = audio.dBFS - silence_thresh_offset_db
+    nonsilent_ranges = detect_nonsilent(
+        audio, min_silence_len=min_gap_ms, silence_thresh=silence_thresh
+    )
+    if not nonsilent_ranges:
+        return audio
+
+    padded = [
+        (max(0, s - padding_ms), min(len(audio), e + padding_ms)) for s, e in nonsilent_ranges
+    ]
+    merged = [padded[0]]
+    for s, e in padded[1:]:
+        last_s, last_e = merged[-1]
+        if s <= last_e:
+            merged[-1] = (last_s, max(last_e, e))
+        else:
+            merged.append((s, e))
+
+    result = AudioSegment.empty()
+    for i, (s, e) in enumerate(merged):
+        chunk = audio[s:e]
+        if i == 0:
+            result = chunk
+        else:
+            can_crossfade = len(result) > crossfade_ms and len(chunk) > crossfade_ms
+            result = result.append(chunk, crossfade=crossfade_ms if can_crossfade else 0)
+    return result
+
+def loudness_normalize(input_path: str, output_path: str) -> None:
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-i", input_path,
+            "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
+            output_path,
+        ],
+        check=True,
+        capture_output=True,
+    )
+
+def process_audio(
+    file_path: str,
+    output_id: str,
+    output_format: str = "mp3",
+    trim_silence: bool = False,
+    min_gap_seconds: float = 3.0,
+    normalize: bool = True,
+):
     """
     Runs demucs on the input file and post-processes the result.
     This runs synchronously and should be called in a background task.
@@ -64,9 +130,11 @@ def process_audio(file_path: str, output_id: str, format: str = "mp3", trim_sile
         import json
         import re
         
-        # Initial progress
-        with open(os.path.join(output_folder, "progress.json"), "w") as f:
-            json.dump({"status": "processing", "message": "Starting separation engine...", "progress": 0}, f)
+        def write_progress(message: str, progress: int):
+            with open(os.path.join(output_folder, "progress.json"), "w") as f:
+                json.dump({"status": "processing", "message": message, "progress": progress}, f)
+        
+        write_progress("Starting separation engine...", 0)
             
         process = subprocess.Popen(
             cmd,
@@ -77,27 +145,68 @@ def process_audio(file_path: str, output_id: str, format: str = "mp3", trim_sile
             universal_newlines=True
         )
         
+        max_progress = 0
         for line in process.stdout:
-            # tqdm format usually: 45%|████...
             match = re.search(r'(\d+)%', line)
             if match:
                 progress_val = int(match.group(1))
-                with open(os.path.join(output_folder, "progress.json"), "w") as f:
-                    json.dump({"status": "processing", "message": f"Separating vocals... {progress_val}%", "progress": progress_val}, f)
+                if progress_val >= max_progress:
+                    max_progress = progress_val
+                    write_progress(f"Separating vocals... {progress_val}%", int(progress_val * 0.7))
         
         process.wait()
         if process.returncode != 0:
             raise subprocess.CalledProcessError(process.returncode, cmd, output="Separation failed")
         
         basename = os.path.splitext(os.path.basename(file_path))[0]
-        vocals_mp3_path = os.path.join(output_folder, "htdemucs_ft", basename, "vocals.mp3")
+        htdemucs_dir = os.path.join(output_folder, "htdemucs_ft")
+        vocals_mp3_path = os.path.join(htdemucs_dir, basename, "vocals.mp3")
         
         if not os.path.exists(vocals_mp3_path):
              raise Exception(f"Expected output file not found at {vocals_mp3_path}")
              
-        final_output_path = os.path.join(output_folder, "final_vocals.mp3")
-        shutil.move(vocals_mp3_path, final_output_path)
+        working_path = vocals_mp3_path
+
+        # --- Trim no-vocal gaps ---
+        if trim_silence:
+            write_progress("Trimming instrumental-only sections...", 75)
+            audio = AudioSegment.from_file(working_path)
+            trimmed = remove_no_vocal_gaps(audio, min_gap_ms=int(min_gap_seconds * 1000))
+            trimmed_path = os.path.join(output_folder, "vocals_trimmed.wav")
+            trimmed.export(trimmed_path, format="wav")
+            working_path = trimmed_path
+
+        # --- Normalize loudness ---
+        if normalize:
+            write_progress("Normalizing loudness...", 90)
+            normalized_path = os.path.join(output_folder, "vocals_normalized.wav")
+            loudness_normalize(working_path, normalized_path)
+            working_path = normalized_path
+
+        # --- Final export ---
+        write_progress("Finalizing...", 95)
+        ext = "mp3" if output_format == "mp3" else "wav"
+        final_output_path = os.path.join(output_folder, f"final_vocals.{ext}")
+
+        if working_path.endswith(f".{ext}") and working_path == vocals_mp3_path and not trim_silence and not normalize:
+            shutil.move(working_path, final_output_path)
+        elif ext == "mp3":
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", working_path, "-codec:a", "libmp3lame", "-b:a", "320k", final_output_path],
+                check=True, capture_output=True,
+            )
+        else:
+            subprocess.run(["ffmpeg", "-y", "-i", working_path, final_output_path], check=True, capture_output=True)
         
+        # Clean up unwanted stems (drums, bass, other)
+        if os.path.exists(htdemucs_dir):
+            shutil.rmtree(htdemucs_dir)
+        for intermediate in ("vocals_trimmed.wav", "vocals_normalized.wav"):
+            p = os.path.join(output_folder, intermediate)
+            if os.path.exists(p) and p != final_output_path:
+                os.remove(p)
+                
+        write_progress("Done", 100)
         print(f"Processing complete: {final_output_path}")
         return final_output_path
         
@@ -113,7 +222,14 @@ def process_audio(file_path: str, output_id: str, format: str = "mp3", trim_sile
         raise
 
 @app.post("/upload")
-async def upload_file(background_tasks: BackgroundTasks, file: UploadFile = File(...), trim_silence: bool = Form(False)):
+async def upload_file(
+    background_tasks: BackgroundTasks, 
+    file: UploadFile = File(...), 
+    trim_silence: bool = Form(False),
+    min_gap_seconds: float = Form(3.0),
+    normalize: bool = Form(True),
+    output_format: str = Form("mp3"),
+):
     job_id = str(uuid.uuid4())
     file_ext = os.path.splitext(file.filename)[1]
     save_path = os.path.join(UPLOAD_DIR, f"{job_id}{file_ext}")
@@ -121,13 +237,16 @@ async def upload_file(background_tasks: BackgroundTasks, file: UploadFile = File
     with open(save_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         
-    background_tasks.add_task(process_audio, save_path, job_id, "mp3", trim_silence)
+    background_tasks.add_task(process_audio, save_path, job_id, output_format, trim_silence, min_gap_seconds, normalize)
     
     return {"job_id": job_id, "status": "processing"}
 
 class YoutubeRequest(BaseModel):
     url: str
     trim_silence: bool = False
+    min_gap_seconds: float = 3.0
+    normalize: bool = True
+    output_format: str = "mp3"
 
 @app.post("/upload-youtube")
 async def upload_youtube(req: YoutubeRequest, background_tasks: BackgroundTasks):
@@ -139,42 +258,47 @@ async def upload_youtube(req: YoutubeRequest, background_tasks: BackgroundTasks)
     try:
         import yt_dlp
         import json
+        import asyncio
         
         output_folder = os.path.join(OUTPUT_DIR, job_id)
         os.makedirs(output_folder, exist_ok=True)
         with open(os.path.join(output_folder, "progress.json"), "w") as f:
             json.dump({"status": "processing", "message": "Downloading YouTube audio... 0%", "progress": 0}, f)
             
-        ydl_opts = {
-            "format": "bestaudio/best",
-            "outtmpl": os.path.join(UPLOAD_DIR, f"{job_id}.%(ext)s"),
-            "postprocessors": [
-                {
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "mp3",
-                    "preferredquality": "192",
-                }
-            ],
-            "noplaylist": True,
-            "quiet": True,
-            "no_warnings": True,
-            "extractor_args": {"youtube": ["player_client=ios", "player_client=android", "player_client=web"]},
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(req.url, download=False)
-            duration = info.get("duration") or 0
-            if duration > 15 * 60:
-                raise HTTPException(status_code=400, detail="Video is too long (Max 15 minutes).")
-            ydl.download([req.url])
+        def run_yt_dlp():
+            ydl_opts = {
+                "format": "bestaudio/best",
+                "outtmpl": os.path.join(UPLOAD_DIR, f"{job_id}.%(ext)s"),
+                "postprocessors": [
+                    {
+                        "key": "FFmpegExtractAudio",
+                        "preferredcodec": "mp3",
+                        "preferredquality": "192",
+                    }
+                ],
+                "noplaylist": True,
+                "quiet": True,
+                "no_warnings": True,
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(req.url, download=False)
+                duration = info.get("duration") or 0
+                if duration > 15 * 60:
+                    raise HTTPException(status_code=400, detail="Video is too long (Max 15 minutes).")
+                ydl.download([req.url])
+
+        await asyncio.to_thread(run_yt_dlp)
             
         with open(os.path.join(output_folder, "progress.json"), "w") as f:
             json.dump({"status": "processing", "message": "Download complete. Queued for separation...", "progress": 10}, f)
             
     except Exception as e:
         print(f"Error downloading youtube: {e}")
+        if isinstance(e, HTTPException):
+            raise e
         raise HTTPException(status_code=400, detail=str(e))
         
-    background_tasks.add_task(process_audio, save_path, job_id, "mp3", req.trim_silence)
+    background_tasks.add_task(process_audio, save_path, job_id, req.output_format, req.trim_silence, req.min_gap_seconds, req.normalize)
     
     return {"job_id": job_id, "status": "processing"}
 
@@ -187,30 +311,36 @@ async def download_youtube_preview(req: YoutubePreviewRequest):
     
     try:
         import yt_dlp
-        ydl_opts = {
-            "format": "bestaudio/best",
-            "outtmpl": os.path.join(UPLOAD_DIR, f"{job_id}.%(ext)s"),
-            "postprocessors": [
-                {
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "mp3",
-                    "preferredquality": "192",
-                }
-            ],
-            "noplaylist": True,
-            "quiet": True,
-            "no_warnings": True,
-            "extractor_args": {"youtube": ["player_client=ios", "player_client=android", "player_client=web"]},
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(req.url, download=False)
-            duration = info.get("duration") or 0
-            if duration > 15 * 60:
-                raise HTTPException(status_code=400, detail="Video is too long (Max 15 minutes).")
-            ydl.download([req.url])
+        import asyncio
+        
+        def run_yt_dlp():
+            ydl_opts = {
+                "format": "bestaudio/best",
+                "outtmpl": os.path.join(UPLOAD_DIR, f"{job_id}.%(ext)s"),
+                "postprocessors": [
+                    {
+                        "key": "FFmpegExtractAudio",
+                        "preferredcodec": "mp3",
+                        "preferredquality": "192",
+                    }
+                ],
+                "noplaylist": True,
+                "quiet": True,
+                "no_warnings": True,
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(req.url, download=False)
+                duration = info.get("duration") or 0
+                if duration > 15 * 60:
+                    raise HTTPException(status_code=400, detail="Video is too long (Max 15 minutes).")
+                ydl.download([req.url])
+                
+        await asyncio.to_thread(run_yt_dlp)
             
     except Exception as e:
         print(f"Error downloading youtube preview: {e}")
+        if isinstance(e, HTTPException):
+            raise e
         raise HTTPException(status_code=400, detail=str(e))
         
     return {"job_id": job_id, "status": "completed"}

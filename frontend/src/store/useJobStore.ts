@@ -13,12 +13,21 @@ interface JobState {
   previewUrl: string | null;
   previewId: string | null;
   
+  // Advanced Settings
+  trimSilence: boolean;
+  minGapSeconds: number;
+  normalize: boolean;
+  outputFormat: string;
+  isYoutubeSource: boolean;
+  
   setJobId: (id: string) => void;
   setStatus: (status: JobStatus) => void;
   setProgress: (progress: number, message?: string) => void;
   setResult: (url: string) => void;
   setError: (error: string | null) => void;
   setPreview: (file: File | null, url: string | null, id: string | null) => void;
+  setIsYoutubeSource: (isYoutube: boolean) => void;
+  setAdvancedSettings: (settings: Partial<{trimSilence: boolean, minGapSeconds: number, normalize: boolean, outputFormat: string}>) => void;
   reset: () => void;
 }
 
@@ -33,12 +42,20 @@ export const useJobStore = create<JobState>((set) => ({
   previewUrl: null,
   previewId: null,
   
+  trimSilence: false,
+  minGapSeconds: 3.0,
+  normalize: true,
+  outputFormat: 'mp3',
+  isYoutubeSource: false,
+  
   setJobId: (id) => set({ jobId: id }),
   setStatus: (status) => set({ status }),
   setProgress: (progress, message) => set((state) => ({ progress, message: message || state.message })),
   setResult: (url) => set({ resultUrl: url, status: 'completed' }),
   setError: (error) => set({ error, status: 'failed' }),
   setPreview: (file, url, id) => set({ previewFile: file, previewUrl: url, previewId: id, status: 'previewing' }),
+  setIsYoutubeSource: (isYoutubeSource) => set({ isYoutubeSource }),
+  setAdvancedSettings: (settings) => set((state) => ({ ...state, ...settings })),
   reset: () => set({ 
     jobId: null, 
     status: 'idle', 
@@ -48,6 +65,7 @@ export const useJobStore = create<JobState>((set) => ({
     error: null,
     previewFile: null,
     previewUrl: null,
-    previewId: null
+    previewId: null,
+    isYoutubeSource: false,
   }),
 }));

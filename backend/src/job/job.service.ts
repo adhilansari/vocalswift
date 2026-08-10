@@ -8,11 +8,19 @@ export class JobService {
     @InjectQueue('audio-separation') private audioQueue: Queue,
   ) {}
 
-  async createJob(filePath: string, format: string = 'mp3', trimSilence: boolean = false) {
+  async createJob(
+    filePath: string, 
+    format: string = 'mp3', 
+    trimSilence: boolean = false,
+    minGapSeconds: number = 3.0,
+    normalize: boolean = true
+  ) {
     const job = await this.audioQueue.add('separate-vocals', {
       filePath,
       format,
-      trimSilence
+      trimSilence,
+      minGapSeconds,
+      normalize
     });
     
     return {
@@ -79,5 +87,26 @@ export class JobService {
       previewId: returnvalue?.previewId,
       error: failedReason
     };
+  }
+
+  async getHistory() {
+    try {
+      const completedJobs = await this.audioQueue.getCompleted();
+      return completedJobs.map(job => {
+        const name = job.data.isYoutube || job.data.isYoutubePreview 
+          ? job.data.url 
+          : job.data.filePath ? (job.data.filePath as string).split(/[\\/]/).pop() : 'Unknown';
+          
+        return {
+          jobId: job.id,
+          name,
+          resultUrl: job.returnvalue?.resultUrl,
+          finishedOn: job.finishedOn,
+        };
+      }).filter(j => j.resultUrl).sort((a, b) => (b.finishedOn || 0) - (a.finishedOn || 0));
+    } catch (err) {
+      console.error('Failed to fetch history', err);
+      return [];
+    }
   }
 }

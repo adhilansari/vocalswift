@@ -64,6 +64,9 @@ export class JobController {
     @Body('fileId') fileId: string,
     @Body('isYoutube') isYoutube: boolean,
     @Body('trimSilence') trimSilence?: boolean,
+    @Body('minGapSeconds') minGapSeconds?: number,
+    @Body('normalize') normalize?: boolean,
+    @Body('outputFormat') outputFormat?: string,
     @Body('start') start?: number,
     @Body('end') end?: number
   ) {
@@ -95,8 +98,19 @@ export class JobController {
     }
 
     // Now we create the separation job!
-    const job = await this.jobService.createJob(targetFilePath, 'mp3', !!trimSilence);
+    const job = await this.jobService.createJob(
+      targetFilePath, 
+      outputFormat || 'mp3', 
+      !!trimSilence,
+      minGapSeconds ?? 3.0,
+      normalize ?? true
+    );
     return job;
+  }
+
+  @Get('history')
+  async getHistory() {
+    return this.jobService.getHistory();
   }
 
   @Get('status/:id')
