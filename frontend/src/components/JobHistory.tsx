@@ -47,7 +47,7 @@ export function JobHistory() {
             </div>
             <div className="flex items-center gap-4 shrink-0 w-[450px]">
               <AudioPlayer 
-                src={`http://localhost:3001${job.resultUrl}`}
+                src={`http://localhost:3001${job.resultUrl}?t=${Date.now()}`}
                 id={job.jobId}
                 isPlaying={playingId === job.jobId}
                 onPlay={handlePlay}

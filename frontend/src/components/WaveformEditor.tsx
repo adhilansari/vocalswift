@@ -50,7 +50,11 @@ export function WaveformEditor() {
           setTrimRegion({ start: region.start, end: region.end });
         });
 
-        const audioUrl = status === 'previewing' ? previewUrl : resultUrl ? `http://localhost:3001${resultUrl}` : null;
+        const audioUrl = status === 'previewing' 
+          ? previewUrl 
+          : resultUrl 
+            ? `http://localhost:3001${resultUrl}?t=${Date.now()}` 
+            : null;
         if (audioUrl) {
           wavesurfer.current.load(audioUrl.startsWith('http') ? audioUrl : `http://localhost:3001${audioUrl}`);
         }
