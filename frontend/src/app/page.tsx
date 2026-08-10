@@ -34,7 +34,7 @@ export default function Home() {
           eventSource.close();
         } else {
           let progressVal = 0;
-          let msg = 'Processing...';
+          let msg = data.message || 'Processing...';
           if (data.progress !== undefined) {
              if (typeof data.progress === 'number') {
                 progressVal = data.progress;

@@ -152,16 +152,26 @@ export class JobController {
 
   @Get('download/:id')
   async downloadResult(@Param('id') id: string, @Res() res: Response) {
-    // The processor will save the result to a specific path
-    const filePath = join(process.cwd(), 'results', `${id}.mp3`);
+    const mp3Path = join(process.cwd(), 'results', `${id}.mp3`);
+    const wavPath = join(process.cwd(), 'results', `${id}.wav`);
     
-    if (!existsSync(filePath)) {
+    let filePath = mp3Path;
+    let format = 'mp3';
+    let contentType = 'audio/mpeg';
+
+    if (existsSync(mp3Path)) {
+        filePath = mp3Path;
+    } else if (existsSync(wavPath)) {
+        filePath = wavPath;
+        format = 'wav';
+        contentType = 'audio/wav';
+    } else {
       return res.status(HttpStatus.NOT_FOUND).json({ error: 'File not found or not ready' });
     }
     
     res.set({
-      'Content-Type': 'audio/mpeg',
-      'Content-Disposition': `attachment; filename="vocals-${id}.mp3"`,
+      'Content-Type': contentType,
+      'Content-Disposition': `attachment; filename="vocals-${id}.${format}"`,
     });
     
     const fileStream = createReadStream(filePath);
@@ -170,17 +180,24 @@ export class JobController {
 
   @Post('trim/:id')
   async trimResult(@Param('id') id: string, @Body('start') start: number, @Body('end') end: number) {
-    const filePath = join(process.cwd(), 'results', `${id}.mp3`);
-    if (!existsSync(filePath)) {
+    const mp3Path = join(process.cwd(), 'results', `${id}.mp3`);
+    const wavPath = join(process.cwd(), 'results', `${id}.wav`);
+    
+    let filePath = mp3Path;
+    let format = 'mp3';
+    if (existsSync(mp3Path)) {
+        filePath = mp3Path;
+    } else if (existsSync(wavPath)) {
+        filePath = wavPath;
+        format = 'wav';
+    } else {
       return { error: 'File not found' };
     }
     
     const trimmedId = `${id}_trimmed_${Math.floor(start)}_${Math.floor(end)}`;
-    const trimmedPath = join(process.cwd(), 'results', `${trimmedId}.mp3`);
+    const trimmedPath = join(process.cwd(), 'results', `${trimmedId}.${format}`);
     
     try {
-      // Use ffmpeg to trim
-      // Note: re-encoding audio slightly to ensure exact trim
       await execAsync(`ffmpeg -y -i "${filePath}" -ss ${start} -to ${end} "${trimmedPath}"`);
       return { resultUrl: `/api/jobs/download/${trimmedId}` };
     } catch (e) {
@@ -190,16 +207,24 @@ export class JobController {
   }
   @Post('trim-silence/:id')
   async trimSilenceResult(@Param('id') id: string) {
-    const filePath = join(process.cwd(), 'results', `${id}.mp3`);
-    if (!existsSync(filePath)) {
+    const mp3Path = join(process.cwd(), 'results', `${id}.mp3`);
+    const wavPath = join(process.cwd(), 'results', `${id}.wav`);
+    
+    let filePath = mp3Path;
+    let format = 'mp3';
+    if (existsSync(mp3Path)) {
+        filePath = mp3Path;
+    } else if (existsSync(wavPath)) {
+        filePath = wavPath;
+        format = 'wav';
+    } else {
       return { error: 'File not found' };
     }
     
     const trimmedId = `${id}_notrim`;
-    const trimmedPath = join(process.cwd(), 'results', `${trimmedId}.mp3`);
+    const trimmedPath = join(process.cwd(), 'results', `${trimmedId}.${format}`);
     
     try {
-      // Use ffmpeg to remove silence from both ends
       await execAsync(`ffmpeg -y -i "${filePath}" -af "silenceremove=start_periods=1:start_duration=0.5:start_threshold=-50dB,areverse,silenceremove=start_periods=1:start_duration=0.5:start_threshold=-50dB,areverse" "${trimmedPath}"`);
       return { resultUrl: `/api/jobs/download/${trimmedId}` };
     } catch (e) {

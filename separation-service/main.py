@@ -145,14 +145,27 @@ def process_audio(
             universal_newlines=True
         )
         
-        max_progress = 0
+        num_models = 4
+        current_model_idx = 0
+        last_progress_val = 0
+        
         for line in process.stdout:
             match = re.search(r'(\d+)%', line)
             if match:
                 progress_val = int(match.group(1))
-                if progress_val >= max_progress:
-                    max_progress = progress_val
-                    write_progress(f"Separating vocals... {progress_val}%", int(progress_val * 0.7))
+                
+                if progress_val < last_progress_val - 50:
+                    current_model_idx += 1
+                
+                last_progress_val = progress_val
+                safe_idx = min(current_model_idx, num_models - 1)
+                
+                model_budget = 70.0 / num_models
+                base_progress = safe_idx * model_budget
+                current_model_progress = (progress_val / 100.0) * model_budget
+                
+                total_progress = int(base_progress + current_model_progress)
+                write_progress(f"Separating vocals... {progress_val}% (Pass {safe_idx + 1}/{num_models})", total_progress)
         
         process.wait()
         if process.returncode != 0:
@@ -348,9 +361,8 @@ async def download_youtube_preview(req: YoutubePreviewRequest):
 @app.get("/status/{job_id}")
 async def get_status(job_id: str):
     output_folder = os.path.join(OUTPUT_DIR, job_id)
-    final_output_path = os.path.join(output_folder, "final_vocals.mp3")
-    
-    if os.path.exists(final_output_path):
+    if os.path.exists(os.path.join(output_folder, "final_vocals.mp3")) or \
+       os.path.exists(os.path.join(output_folder, "final_vocals.wav")):
         return {"job_id": job_id, "status": "completed"}
     
     if os.path.exists(os.path.join(output_folder, "error.txt")):
@@ -375,13 +387,20 @@ async def get_status(job_id: str):
 @app.get("/download/{job_id}")
 async def download_file(job_id: str):
     output_folder = os.path.join(OUTPUT_DIR, job_id)
-    final_output_path = os.path.join(output_folder, "final_vocals.mp3")
+    mp3_path = os.path.join(output_folder, "final_vocals.mp3")
+    wav_path = os.path.join(output_folder, "final_vocals.wav")
     
-    if os.path.exists(final_output_path):
+    if os.path.exists(mp3_path):
         return FileResponse(
-            path=final_output_path, 
+            path=mp3_path, 
             filename="vocals.mp3",
             media_type="audio/mpeg"
+        )
+    elif os.path.exists(wav_path):
+        return FileResponse(
+            path=wav_path, 
+            filename="vocals.wav",
+            media_type="audio/wav"
         )
     
     raise HTTPException(status_code=404, detail="File not ready or not found")

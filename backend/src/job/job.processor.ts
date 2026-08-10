@@ -141,7 +141,8 @@ export class AudioJobProcessor extends WorkerHost {
          throw new Error(`Failed to download result: ${downloadResponse.statusText}`);
       }
 
-      const finalFilePath = join(resultsDir, `${job.id}.mp3`);
+      const outputFormat = job.data.format || 'mp3';
+      const finalFilePath = join(resultsDir, `${job.id}.${outputFormat}`);
       
       // Node 18+ fetch returns a web stream, we can pipe it
       const fs = await import('fs');
