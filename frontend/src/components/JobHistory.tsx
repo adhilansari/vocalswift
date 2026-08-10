@@ -1,9 +1,10 @@
-import { useEffect, useState, useCallback } from 'react';
 import { Download } from 'lucide-react';
 import { useJobStore } from '../store/useJobStore';
+import { AudioPlayer } from './AudioPlayer';
 
 export function JobHistory() {
   const [history, setHistory] = useState<any[]>([]);
+  const [playingId, setPlayingId] = useState<string | null>(null);
   const { status, resultUrl } = useJobStore();
 
   const fetchHistory = useCallback(async () => {
@@ -14,6 +15,14 @@ export function JobHistory() {
       console.error(err);
     }
   }, []);
+
+  const handlePlay = (id: string) => {
+    setPlayingId(id);
+  };
+
+  const handlePause = () => {
+    setPlayingId(null);
+  };
 
   useEffect(() => {
     fetchHistory();
@@ -35,14 +44,23 @@ export function JobHistory() {
                 })}
               </p>
             </div>
-            <a 
-              href={`http://localhost:3001${job.resultUrl}`} 
-              download
-              className="w-10 h-10 rounded-lg bg-neutral-800 hover:bg-neutral-700 flex items-center justify-center text-neutral-300 hover:text-white transition-all hover:scale-105 active:scale-95 shrink-0"
-              title="Download MP3"
-            >
-              <Download className="w-5 h-5" />
-            </a>
+            <div className="flex items-center gap-4 shrink-0 w-[450px]">
+              <AudioPlayer 
+                src={`http://localhost:3001${job.resultUrl}`}
+                id={job.jobId}
+                isPlaying={playingId === job.jobId}
+                onPlay={handlePlay}
+                onPause={handlePause}
+              />
+              <a 
+                href={`http://localhost:3001${job.resultUrl}`} 
+                download
+                className="w-10 h-10 rounded-lg bg-neutral-800 hover:bg-neutral-700 flex items-center justify-center text-neutral-300 hover:text-white transition-all hover:scale-105 active:scale-95 shrink-0"
+                title="Download"
+              >
+                <Download className="w-5 h-5" />
+              </a>
+            </div>
           </div>
         ))}
       </div>

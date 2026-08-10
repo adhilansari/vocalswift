@@ -143,16 +143,11 @@ export class AudioJobProcessor extends WorkerHost {
       const outputFormat = job.data.format || 'mp3';
       const finalFilePath = join(resultsDir, `${job.id}.${outputFormat}`);
       
-      // Node 18+ fetch returns a web stream, we can pipe it
       const fs = await import('fs');
-      const { pipeline } = await import('stream/promises');
       
-      if (downloadResponse.body) {
-        // @ts-ignore
-        await pipeline(downloadResponse.body, fs.createWriteStream(finalFilePath));
-      } else {
-        throw new Error('Empty response body');
-      }
+      const arrayBuffer = await downloadResponse.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      await fs.promises.writeFile(finalFilePath, buffer);
 
       await job.updateProgress({ percent: 100, message: 'Done' });
       this.logger.log(`Job ${job.id} completed. Result saved to ${finalFilePath}`);
