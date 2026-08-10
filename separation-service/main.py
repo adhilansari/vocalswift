@@ -260,6 +260,12 @@ async def upload_file(
     with open(save_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         
+    output_folder = os.path.join(OUTPUT_DIR, job_id)
+    os.makedirs(output_folder, exist_ok=True)
+    import json
+    with open(os.path.join(output_folder, "progress.json"), "w") as f:
+        json.dump({"status": "processing", "message": "Starting separation engine...", "progress": 0}, f)
+        
     background_tasks.add_task(
         process_audio, 
         save_path, 
