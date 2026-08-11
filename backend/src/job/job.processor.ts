@@ -175,9 +175,9 @@ export class AudioJobProcessor extends WorkerHost {
       const finalFilePath = join(resultsDir, `${job.id}.${outputFormat}`);
 
       const fs = await import('fs');
+      const { pipeline } = await import('stream/promises');
 
-      const arrayBuffer = await downloadResponse.arrayBuffer();
-      await fs.promises.writeFile(finalFilePath, Buffer.from(arrayBuffer));
+      await pipeline(downloadResponse.body, fs.createWriteStream(finalFilePath));
 
       await job.updateProgress({ percent: 100, message: 'Done' });
       this.logger.log(
